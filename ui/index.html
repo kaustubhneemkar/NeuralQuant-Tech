@@ -1,0 +1,904 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Alpha-Lens | Quant Analysis Agent</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@300;400;600;700&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --acid:   #00ff88;
+    --warn:   #ffcc00;
+    --loss:   #ff3366;
+    --dim:    #1a2233;
+    --panel:  #0d1520;
+    --border: #1e3040;
+    --text:   #8faabf;
+    --bright: #c8e0f0;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #070d14;
+    font-family: 'Rajdhani', sans-serif;
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Scanline overlay ── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,255,136,0.015) 2px,
+      rgba(0,255,136,0.015) 4px
+    );
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  /* ── Grid noise bg ── */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,255,136,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,255,136,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .mono  { font-family: 'Share Tech Mono', monospace; }
+  .orb   { font-family: 'Orbitron', monospace; }
+
+  /* ── Panels ── */
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    position: relative;
+    z-index: 1;
+  }
+  .panel::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(0,255,136,0.03) 0%, transparent 60%);
+    pointer-events: none;
+  }
+
+  /* ── Corner notch decoration ── */
+  .notch::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    right: -1px;
+    width: 12px;
+    height: 12px;
+    background: #070d14;
+    clip-path: polygon(100% 0, 100% 100%, 0 100%);
+    border-left: 1px solid var(--border);
+    border-top: 1px solid var(--border);
+  }
+
+  /* ── Acid green accent text ── */
+  .acid  { color: var(--acid); }
+  .warn  { color: var(--warn); }
+  .loss  { color: var(--loss); }
+  .bright{ color: var(--bright); }
+
+  /* ── Glowing header text ── */
+  .glow {
+    text-shadow:
+      0 0 10px rgba(0,255,136,0.8),
+      0 0 30px rgba(0,255,136,0.4),
+      0 0 60px rgba(0,255,136,0.2);
+  }
+
+  /* ── Input ── */
+  .cmd-input {
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--acid);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 14px;
+    width: 100%;
+    caret-color: var(--acid);
+  }
+  .cmd-input::placeholder { color: #2a4055; }
+
+  /* ── Submit button ── */
+  .btn-analyze {
+    background: linear-gradient(135deg, #00cc66, #009944);
+    color: #000;
+    font-family: 'Orbitron', monospace;
+    font-weight: 700;
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    border: none;
+    cursor: pointer;
+    clip-path: polygon(8px 0%, 100% 0%, calc(100% - 8px) 100%, 0% 100%);
+    transition: all 0.2s;
+    padding: 10px 28px;
+  }
+  .btn-analyze:hover {
+    background: linear-gradient(135deg, #00ff88, #00cc55);
+    box-shadow: 0 0 20px rgba(0,255,136,0.5);
+  }
+  .btn-analyze:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* ── Output area ── */
+  #output-area {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 13px;
+    line-height: 1.8;
+    color: var(--bright);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  /* ── Tool call badge ── */
+  .tool-call {
+    display: inline-block;
+    background: rgba(0,255,136,0.08);
+    border: 1px solid rgba(0,255,136,0.3);
+    color: var(--acid);
+    padding: 2px 10px;
+    font-size: 12px;
+    margin: 4px 0;
+    font-family: 'Share Tech Mono', monospace;
+  }
+
+  /* ── JSON block ── */
+  .json-block {
+    background: rgba(0,0,0,0.4);
+    border-left: 2px solid rgba(0,255,136,0.4);
+    padding: 8px 12px;
+    margin: 4px 0;
+    font-size: 12px;
+    color: #6abf8a;
+    overflow-x: auto;
+  }
+
+  /* ── Signal badge ── */
+  .signal-bullish { color: var(--acid);  font-weight: 700; }
+  .signal-bearish { color: var(--loss);  font-weight: 700; }
+  .signal-neutral { color: var(--warn);  font-weight: 700; }
+
+  /* ── Ticker tape ── */
+  .ticker-wrap {
+    overflow: hidden;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+  .ticker-inner {
+    display: flex;
+    animation: ticker 30s linear infinite;
+    white-space: nowrap;
+  }
+  @keyframes ticker {
+    0%   { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+  }
+  .ticker-item { padding: 0 32px; font-size: 12px; }
+
+  /* ── Blinking cursor ── */
+  .blink {
+    display: inline-block;
+    width: 8px;
+    height: 14px;
+    background: var(--acid);
+    animation: blink 1s step-end infinite;
+    vertical-align: middle;
+    margin-left: 2px;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* ── Status dot ── */
+  .status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--acid);
+    box-shadow: 0 0 6px var(--acid);
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 6px var(--acid); }
+    50%       { opacity: 0.5; box-shadow: 0 0 12px var(--acid); }
+  }
+
+  /* ── Mini metric card ── */
+  .metric-card {
+    background: rgba(0,255,136,0.04);
+    border: 1px solid rgba(0,255,136,0.12);
+    padding: 12px 14px;
+  }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: var(--panel); }
+  ::-webkit-scrollbar-thumb { background: #1e4030; border-radius: 2px; }
+
+  /* ── Fade-in animation ── */
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .fade-in { animation: fadeIn 0.3s ease forwards; }
+
+  /* ── Loading spinner ── */
+  .spinner {
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(0,255,136,0.2);
+    border-top-color: var(--acid);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Query suggestions ── */
+  .suggestion {
+    cursor: pointer;
+    padding: 6px 10px;
+    border: 1px solid rgba(0,255,136,0.1);
+    background: rgba(0,255,136,0.03);
+    font-size: 12px;
+    transition: all 0.15s;
+    font-family: 'Share Tech Mono', monospace;
+  }
+  .suggestion:hover {
+    border-color: rgba(0,255,136,0.4);
+    background: rgba(0,255,136,0.08);
+    color: var(--acid);
+  }
+</style>
+</head>
+
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════
+     HEADER
+═══════════════════════════════════════════════════════════ -->
+<header class="panel notch relative z-10" style="border-left:none;border-right:none;border-top:none;">
+  <div class="flex items-center justify-between px-6 py-3">
+    <!-- Logo -->
+    <div class="flex items-center gap-4">
+      <div class="relative">
+        <div style="width:36px;height:36px;border:1px solid var(--acid);transform:rotate(45deg);display:flex;align-items:center;justify-content:center;">
+          <div style="width:16px;height:16px;background:var(--acid);transform:rotate(0deg);"></div>
+        </div>
+      </div>
+      <div>
+        <h1 class="orb text-xl font-black acid glow tracking-widest">ALPHA-LENS</h1>
+        <p class="mono text-xs" style="color:#2a5040;letter-spacing:0.2em;">QUANT ANALYSIS AGENT v1.0</p>
+      </div>
+    </div>
+
+    <!-- Status bar -->
+    <div class="flex items-center gap-6 text-xs mono">
+      <div class="flex items-center gap-2">
+        <div class="status-dot"></div>
+        <span class="acid">MCP ONLINE</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <div class="status-dot" style="background:var(--warn);box-shadow:0 0 6px var(--warn);"></div>
+        <span class="warn">MODEL: API</span>
+      </div>
+      <div class="text-right hidden md:block">
+        <div class="bright" id="clock">--:--:-- UTC</div>
+        <div style="color:#2a4055;">NYSE CLOSED</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ticker tape -->
+  <div class="ticker-wrap py-1">
+    <div class="ticker-inner mono text-xs" id="ticker">
+      <!-- Duplicated for seamless loop -->
+      <span class="ticker-item"><span class="acid">▲</span> <span class="bright">AAPL</span> 189.50 <span class="acid">+2.1%</span></span>
+      <span class="ticker-item"><span class="loss">▼</span> <span class="bright">TSLA</span> 248.30 <span class="loss">-1.4%</span></span>
+      <span class="ticker-item"><span class="acid">▲</span> <span class="bright">NVDA</span> 875.20 <span class="acid">+3.8%</span></span>
+      <span class="ticker-item"><span class="acid">▲</span> <span class="bright">SPY</span>  445.60 <span class="acid">+0.6%</span></span>
+      <span class="ticker-item"><span class="loss">▼</span> <span class="bright">QQQ</span>  377.40 <span class="loss">-0.9%</span></span>
+      <span class="ticker-item"><span class="warn">●</span> <span class="bright">VIX</span>   18.40 <span class="warn">+0.2%</span></span>
+      <span class="ticker-item"><span class="acid">▲</span> <span class="bright">GLD</span>  198.70 <span class="acid">+1.2%</span></span>
+      <span class="ticker-item"><span class="loss">▼</span> <span class="bright">BTC</span>  67,420 <span class="loss">-2.3%</span></span>
+      <span class="ticker-item"><span class="bright">──</span> <span class="bright">DXY</span>  103.80 <span class="acid">+0.3%</span></span>
+      <!-- duplicate -->
+      <span class="ticker-item"><span class="acid">▲</span> <span class="bright">AAPL</span> 189.50 <span class="acid">+2.1%</span></span>
+      <span class="ticker-item"><span class="loss">▼</span> <span class="bright">TSLA</span> 248.30 <span class="loss">-1.4%</span></span>
+      <span class="ticker-item"><span class="acid">▲</span> <span class="bright">NVDA</span> 875.20 <span class="acid">+3.8%</span></span>
+      <span class="ticker-item"><span class="acid">▲</span> <span class="bright">SPY</span>  445.60 <span class="acid">+0.6%</span></span>
+      <span class="ticker-item"><span class="loss">▼</span> <span class="bright">QQQ</span>  377.40 <span class="loss">-0.9%</span></span>
+      <span class="ticker-item"><span class="warn">●</span> <span class="bright">VIX</span>   18.40 <span class="warn">+0.2%</span></span>
+      <span class="ticker-item"><span class="acid">▲</span> <span class="bright">GLD</span>  198.70 <span class="acid">+1.2%</span></span>
+      <span class="ticker-item"><span class="loss">▼</span> <span class="bright">BTC</span>  67,420 <span class="loss">-2.3%</span></span>
+      <span class="ticker-item"><span class="bright">──</span> <span class="bright">DXY</span>  103.80 <span class="acid">+0.3%</span></span>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════════════════════════════════════════════════════════
+     MAIN LAYOUT
+═══════════════════════════════════════════════════════════ -->
+<div class="flex relative z-1" style="min-height: calc(100vh - 80px);">
+
+  <!-- ── LEFT SIDEBAR ── -->
+  <aside class="panel w-56 shrink-0 flex flex-col border-r" style="border-top:none;">
+    <!-- MCP Tools -->
+    <div class="p-4 border-b" style="border-color:var(--border);">
+      <div class="mono text-xs acid mb-3 tracking-widest flex items-center gap-2">
+        <span>◈</span> MCP TOOLS
+      </div>
+      <div id="tool-list" class="space-y-1"></div>
+    </div>
+
+    <!-- Quick symbols -->
+    <div class="p-4 border-b" style="border-color:var(--border);">
+      <div class="mono text-xs acid mb-3 tracking-widest flex items-center gap-2">
+        <span>◈</span> WATCHLIST
+      </div>
+      <div class="space-y-1">
+        <div class="flex justify-between mono text-xs py-1 cursor-pointer hover:text-green-400 transition-colors" onclick="setSymbol('AAPL')">
+          <span class="bright">AAPL</span><span class="acid">189.50</span>
+        </div>
+        <div class="flex justify-between mono text-xs py-1 cursor-pointer hover:text-green-400 transition-colors" onclick="setSymbol('NVDA')">
+          <span class="bright">NVDA</span><span class="acid">875.20</span>
+        </div>
+        <div class="flex justify-between mono text-xs py-1 cursor-pointer hover:text-green-400 transition-colors" onclick="setSymbol('SPY')">
+          <span class="bright">SPY</span><span class="acid">445.60</span>
+        </div>
+        <div class="flex justify-between mono text-xs py-1 cursor-pointer hover:text-green-400 transition-colors" onclick="setSymbol('TSLA')">
+          <span class="bright">TSLA</span><span class="loss">248.30</span>
+        </div>
+        <div class="flex justify-between mono text-xs py-1 cursor-pointer hover:text-green-400 transition-colors" onclick="setSymbol('QQQ')">
+          <span class="bright">QQQ</span><span class="loss">377.40</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Metrics -->
+    <div class="p-4 flex-1">
+      <div class="mono text-xs acid mb-3 tracking-widest flex items-center gap-2">
+        <span>◈</span> SESSION
+      </div>
+      <div class="space-y-2">
+        <div class="metric-card">
+          <div class="mono text-xs" style="color:#2a5040;">ANALYSES RUN</div>
+          <div class="orb text-2xl acid" id="metric-count">0</div>
+        </div>
+        <div class="metric-card">
+          <div class="mono text-xs" style="color:#2a5040;">TOOL CALLS</div>
+          <div class="orb text-2xl warn" id="metric-tools">0</div>
+        </div>
+        <div class="metric-card">
+          <div class="mono text-xs" style="color:#2a5040;">LAST SIGNAL</div>
+          <div class="orb text-sm mt-1" id="metric-signal" style="color:#2a5040;">NONE</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ── MAIN PANEL ── -->
+  <main class="flex-1 flex flex-col" style="min-width:0;">
+
+    <!-- Input bar -->
+    <div class="panel border-b border-t-0 border-l-0 border-r-0 p-4">
+      <div class="flex items-center gap-4">
+        <!-- Symbol input -->
+        <div class="panel flex items-center gap-2 px-3 py-2 shrink-0" style="width:120px;">
+          <span class="mono text-xs" style="color:#2a5040;">SYM:</span>
+          <input id="symbol-input" class="cmd-input text-sm" style="width:60px;" placeholder="AAPL" value="AAPL" />
+        </div>
+
+        <!-- Query input -->
+        <div class="panel flex items-center flex-1 px-4 py-2 gap-2">
+          <span class="acid mono text-sm">›</span>
+          <input
+            id="query-input"
+            class="cmd-input"
+            placeholder="Analyze for momentum signals, HFT patterns, mean-reversion setups..."
+            autocomplete="off"
+          />
+          <div id="thinking-dot" class="spinner hidden"></div>
+        </div>
+
+        <button id="analyze-btn" class="btn-analyze" onclick="runAnalysis()">
+          ANALYZE
+        </button>
+
+        <!-- New Audit Button -->
+        <button id="audit-btn" class="btn-analyze" style="background:linear-gradient(135deg, #1a2233, #0d1520); color:var(--acid); border:1px solid var(--border); clip-path:none; padding:10px 15px;" onclick="showAuditModal()">
+          RUN AUDIT
+        </button>
+      </div>
+
+      <!-- Suggestions -->
+      <div class="flex gap-2 mt-3 flex-wrap">
+        <div class="suggestion" onclick="useSuggestion(this)">detect momentum breakout</div>
+        <div class="suggestion" onclick="useSuggestion(this)">check for mean reversion setup</div>
+        <div class="suggestion" onclick="useSuggestion(this)">analyze order book imbalance</div>
+        <div class="suggestion" onclick="useSuggestion(this)">scan for HFT gamma squeeze</div>
+        <div class="suggestion" onclick="useSuggestion(this)">evaluate stat arb vs QQQ</div>
+      </div>
+    </div>
+
+    <!-- ── AUDIT MODAL ── -->
+    <div id="audit-modal" class="fixed inset-0 bg-black/80 flex items-center justify-center hidden z-[10000] p-6">
+      <div class="panel w-full max-w-2xl max-h-[80vh] flex flex-col overflow-hidden shadow-2xl border-acid/20">
+        <div class="p-4 border-b border-border flex justify-between items-center bg-dim">
+          <div class="orb text-sm acid tracking-widest flex items-center gap-2">
+            <span>📜</span> PERFORMANCE AUDIT ENGINE
+          </div>
+          <button onclick="closeAuditModal()" class="text-text hover:text-acid mono text-lg">✕</button>
+        </div>
+        
+        <div class="p-6 overflow-y-auto space-y-6" id="audit-content">
+          <!-- Initial State -->
+          <div id="audit-init">
+            <p class="mono text-sm mb-4" style="color:var(--text);">Select a historical dataset to certify the agent's performance. (40% randomized backtest)</p>
+            <div class="space-y-3">
+              <div class="panel p-3 border-border hover:border-acid/40 cursor-pointer transition-all flex items-center justify-between" onclick="triggerAudit('data/gold_data_1h_cleaned.csv')">
+                <div class="mono text-xs">
+                  <div class="bright">gold_data_1h_cleaned.csv</div>
+                  <div style="color:#2a5040;">Real Hourly Gold (2024-2026)</div>
+                </div>
+                <div class="acid mono text-xs">CERTIFY ›</div>
+              </div>
+              <div class="panel p-3 border-border opacity-50 cursor-not-allowed flex items-center justify-between">
+                <div class="mono text-xs">
+                  <div class="bright">upload_custom.csv</div>
+                  <div style="color:#2a5040;">Upload your own data (Coming Soon)</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Loading State -->
+          <div id="audit-loading" class="hidden py-12 flex flex-col items-center justify-center text-center">
+            <div class="spinner mb-4" style="width:40px; height:40px; border-width:4px;"></div>
+            <div class="orb acid glow text-lg mb-2">RUNNING AUDIT...</div>
+            <p class="mono text-xs text-text">Simulating 40% of historical rows and evaluating Gemini signals.</p>
+            <p class="mono text-[10px] mt-4" style="color:#2a5040;">This may take 30-60 seconds depending on API limits.</p>
+          </div>
+
+          <!-- Results State -->
+          <div id="audit-results" class="hidden space-y-4">
+             <div class="metric-card border-acid/30 text-center py-8">
+               <div class="orb acid glow text-4xl mb-1" id="audit-winrate">0%</div>
+               <div class="mono text-xs bright tracking-[0.2em]">CERTIFIED WIN RATE</div>
+             </div>
+
+             <div class="grid grid-cols-2 gap-4">
+               <div class="metric-card">
+                 <div class="mono text-[10px]" style="color:#2a5040;">SAMPLES PROCESSED</div>
+                 <div class="orb text-lg bright" id="audit-samples">0</div>
+               </div>
+               <div class="metric-card relative group">
+                 <div class="mono text-[10px] flex items-center gap-1" style="color:#2a5040;">
+                   AVG. PROFIT / SIGNAL
+                   <span class="cursor-help text-[10px] opacity-50">ⓘ</span>
+                   <div class="absolute bottom-full left-0 mb-2 w-48 p-2 bg-[#0d1520] border border-border text-[9px] mono text-text hidden group-hover:block z-[10001] shadow-xl leading-tight">
+                     Since we use randomized Monte Carlo sampling, this represents the average gain expected from a single signal, rather than a cumulative account balance.
+                   </div>
+                 </div>
+                 <div class="orb text-lg acid" id="audit-pnl">0</div>
+               </div>
+             </div>
+
+             <div class="metric-card border-warn/20">
+                <div class="mono text-[10px]" style="color:#2a5040;">STRATEGY EXPECTANCY</div>
+                <div class="orb text-xl warn" id="audit-expectancy">0.00</div>
+                <div class="mono text-[9px] mt-1" style="color:#2a4030;">(Win% × AvgWin) - (Loss% × AvgLoss)</div>
+             </div>
+
+             <div class="panel p-4 bg-black/40">
+                <div class="mono text-xs acid mb-3 tracking-widest">SIGNAL DISTRIBUTION</div>
+                <div class="flex gap-4 mono text-[10px]">
+                  <div class="flex-1 bg-acid/10 p-2 border border-acid/20">BULLISH: <span class="acid" id="audit-buys">0</span></div>
+                  <div class="flex-1 bg-loss/10 p-2 border border-loss/20">BEARISH: <span class="loss" id="audit-sells">0</span></div>
+                  <div class="flex-1 bg-warn/10 p-2 border border-warn/20">NEUTRAL: <span class="warn" id="audit-neutrals">0</span></div>
+                </div>
+             </div>
+
+             <div id="audit-examples" class="space-y-2">
+                <!-- Winning Example -->
+                <div class="panel p-3 border-acid/20 bg-acid/5">
+                   <div class="mono text-[10px] acid mb-1 uppercase tracking-widest">Winning Case</div>
+                   <div class="mono text-xs bright" id="audit-win-ex">--</div>
+                </div>
+                <!-- Losing Example -->
+                <div class="panel p-3 border-loss/20 bg-loss/5">
+                   <div class="mono text-[10px] loss mb-1 uppercase tracking-widest">Losing Case</div>
+                   <div class="mono text-xs bright" id="audit-loss-ex">--</div>
+                </div>
+             </div>
+
+             <div class="text-center pt-4">
+                <button onclick="closeAuditModal()" class="btn-analyze text-[10px] py-2 px-6">DISMISS CERTIFICATE</button>
+             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Output terminal -->
+    <div class="flex-1 p-4 overflow-y-auto" style="background:rgba(0,0,0,0.3);">
+      <!-- Welcome state -->
+      <div id="welcome-state" class="flex flex-col items-center justify-center h-full text-center">
+        <div class="orb text-4xl font-black glow acid mb-2">⬡</div>
+        <h2 class="orb text-xl font-bold bright mb-1">ALPHA-LENS READY</h2>
+        <p class="mono text-xs" style="color:#2a4055;">Fine-tuned Quant Agent · MCP Tool Integration · ReAct Loop</p>
+        <div class="mt-6 mono text-xs space-y-1" style="color:#1e3040;">
+          <div>► Enter a symbol + query above to begin analysis</div>
+          <div>► Agent will call MCP tools automatically when needed</div>
+          <div>► Watch the reasoning chain unfold in real-time</div>
+        </div>
+      </div>
+
+      <!-- Session log -->
+      <div id="session-log" class="space-y-4 hidden"></div>
+    </div>
+  </main>
+
+  <!-- ── RIGHT SIDEBAR ── -->
+  <aside class="panel w-52 shrink-0 border-l" style="border-top:none;">
+    <div class="p-4">
+      <div class="mono text-xs acid mb-3 tracking-widest flex items-center gap-2">
+        <span>◈</span> SIGNAL LOG
+      </div>
+      <div id="signal-log" class="space-y-2 mono text-xs" style="color:#2a4055;">
+        <div>No signals yet...</div>
+      </div>
+    </div>
+
+    <div class="border-t p-4" style="border-color:var(--border);">
+      <div class="mono text-xs acid mb-3 tracking-widest">◈ ARCHITECTURE</div>
+      <div class="space-y-2 text-xs mono" style="color:#1e3a2a;line-height:1.9;">
+        <div><span class="acid">UI</span> index.html</div>
+        <div style="padding-left:12px;">↓ SSE stream</div>
+        <div><span class="acid">API</span> FastAPI</div>
+        <div style="padding-left:12px;">↓ ReAct loop</div>
+        <div><span class="acid">LLM</span> Llama-3 QLoRA</div>
+        <div style="padding-left:12px;">↓ tool_call tags</div>
+        <div><span class="acid">MCP</span> server.py</div>
+        <div style="padding-left:12px;">↓ JSON-RPC</div>
+        <div><span class="acid">TOOLS</span> RSI/MACD/OB</div>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     JAVASCRIPT
+═══════════════════════════════════════════════════════════ -->
+<script>
+// ── STATE ────────────────────────────────────────────────────
+const state = {
+  analysisCount: 0,
+  toolCallCount:  0,
+  isStreaming:    false,
+  signals:        [],
+};
+
+// ── CLOCK ────────────────────────────────────────────────────
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    now.toUTCString().slice(17, 25) + ' UTC';
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ── LOAD TOOLS FROM API ──────────────────────────────────────
+async function loadTools() {
+  const container = document.getElementById('tool-list');
+  try {
+    const r = await fetch('/tools');
+    const data = await r.json();
+    container.innerHTML = data.tools.map(t => `
+      <div class="mono text-xs py-1 flex items-center gap-2" style="color:#1e4030;">
+        <span class="acid">◆</span>
+        <span class="bright" title="${t.description}">${t.name}</span>
+      </div>
+    `).join('');
+  } catch {
+    // Static fallback
+    container.innerHTML = `
+      <div class="mono text-xs py-1 flex items-center gap-2" style="color:#1e4030;"><span class="acid">◆</span><span class="bright">get_market_data</span></div>
+      <div class="mono text-xs py-1 flex items-center gap-2" style="color:#1e4030;"><span class="acid">◆</span><span class="bright">compute_rsi</span></div>
+      <div class="mono text-xs py-1 flex items-center gap-2" style="color:#1e4030;"><span class="acid">◆</span><span class="bright">compute_macd</span></div>
+      <div class="mono text-xs py-1 flex items-center gap-2" style="color:#1e4030;"><span class="acid">◆</span><span class="bright">get_order_book</span></div>
+    `;
+  }
+}
+loadTools();
+
+// ── HELPERS ──────────────────────────────────────────────────
+function setSymbol(sym) {
+  document.getElementById('symbol-input').value = sym;
+}
+
+function useSuggestion(el) {
+  document.getElementById('query-input').value = el.textContent;
+  document.getElementById('query-input').focus();
+}
+
+function updateMetrics() {
+  document.getElementById('metric-count').textContent = state.analysisCount;
+  document.getElementById('metric-tools').textContent = state.toolCallCount;
+}
+
+function addSignalToLog(text) {
+  const container = document.getElementById('signal-log');
+  if (container.firstChild?.textContent === 'No signals yet...') {
+    container.innerHTML = '';
+  }
+
+  const lower = text.toLowerCase();
+  let cls = 'neutral', label = '●';
+  if (lower.includes('bullish') || lower.includes('long') || lower.includes('buy')) {
+    cls = 'bullish'; label = '▲';
+  } else if (lower.includes('bearish') || lower.includes('short') || lower.includes('sell')) {
+    cls = 'bearish'; label = '▼';
+  }
+
+  const el = document.createElement('div');
+  el.className = 'fade-in';
+  el.innerHTML = `
+    <div class="signal-${cls} mono text-xs">${label} ${text.slice(0, 50)}</div>
+    <div style="color:#1e3040;font-size:10px;">${new Date().toLocaleTimeString()}</div>
+  `;
+  container.prepend(el);
+
+  const sigEl = document.getElementById('metric-signal');
+  sigEl.textContent = cls.toUpperCase();
+  sigEl.className = `orb text-sm mt-1 signal-${cls}`;
+}
+
+// ── FORMAT OUTPUT CHUNK ──────────────────────────────────────
+function formatChunk(text) {
+  // Detect tool call announcements
+  if (text.startsWith('\n⚡ Calling tool:')) {
+    const tool = text.match(/`([^`]+)`/)?.[1] || '';
+    state.toolCallCount++;
+    updateMetrics();
+    return `<span class="tool-call">⚡ TOOL → ${tool}</span>\n`;
+  }
+
+  // Detect JSON blocks
+  if (text.startsWith('```json\n') || text.startsWith('```json')) {
+    const json = text.replace(/```json\n?/g, '').replace(/```/g, '').trim();
+    return `<div class="json-block">${escapeHtml(json)}</div>`;
+  }
+  if (text.startsWith('```\n') || text === '```') {
+    return '';
+  }
+
+  // Colorize SIGNAL lines
+  text = text.replace(/(SIGNAL:\s*)([^\n]+)/g, (_, prefix, signal) => {
+    const lower = signal.toLowerCase();
+    let cls = 'signal-neutral';
+    if (lower.includes('bullish') || lower.includes('long')) cls = 'signal-bullish';
+    if (lower.includes('bearish') || lower.includes('short')) cls = 'signal-bearish';
+    if (lower.includes('signal')) addSignalToLog(signal.trim());
+    return `${prefix}<span class="${cls}">${signal}</span>`;
+  });
+
+  return text;
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── MAIN ANALYSIS FUNCTION ───────────────────────────────────
+async function runAnalysis() {
+  if (state.isStreaming) return;
+
+  const query  = document.getElementById('query-input').value.trim();
+  const symbol = document.getElementById('symbol-input').value.trim().toUpperCase();
+
+  if (!query) {
+    document.getElementById('query-input').focus();
+    return;
+  }
+
+  state.isStreaming = true;
+  state.analysisCount++;
+  updateMetrics();
+
+  // UI state
+  document.getElementById('analyze-btn').disabled = true;
+  document.getElementById('thinking-dot').classList.remove('hidden');
+  document.getElementById('welcome-state').classList.add('hidden');
+
+  const log = document.getElementById('session-log');
+  log.classList.remove('hidden');
+
+  // Create entry block
+  const entry = document.createElement('div');
+  entry.className = 'panel fade-in p-4';
+  entry.innerHTML = `
+    <div class="flex items-center gap-3 mb-3 pb-3" style="border-bottom:1px solid var(--border);">
+      <div class="orb text-xs acid" style="opacity:0.6;">#${state.analysisCount.toString().padStart(3,'0')}</div>
+      <div class="mono text-xs bright">[${symbol}]</div>
+      <div class="mono text-xs" style="color:var(--text);">${escapeHtml(query)}</div>
+      <div class="ml-auto mono text-xs" style="color:#1e3040;">${new Date().toLocaleTimeString()}</div>
+    </div>
+    <div id="output-${state.analysisCount}" class="output-area" style="font-family:'Share Tech Mono',monospace;font-size:13px;line-height:1.9;color:var(--bright);"></div>
+    <div id="cursor-${state.analysisCount}"><span class="blink"></span></div>
+  `;
+  log.appendChild(entry);
+  entry.scrollIntoView({ behavior: 'smooth', block: 'end' });
+
+  const outputEl = document.getElementById(`output-${state.analysisCount}`);
+  const cursorEl = document.getElementById(`cursor-${state.analysisCount}`);
+
+  // ── SSE STREAM ───────────────────────────────────────────
+  let buffer = '';
+
+  try {
+    const response = await fetch('/analyze/stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, symbol }),
+    });
+
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+    const reader  = response.body.getReader();
+    const decoder = new TextDecoder();
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+
+      const text = decoder.decode(value, { stream: true });
+      const lines = text.split('\n');
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        try {
+          const msg = JSON.parse(line.slice(6));
+          if (msg.type === 'token') {
+            outputEl.innerHTML += formatChunk(msg.content);
+            entry.scrollIntoView({ behavior: 'smooth', block: 'end' });
+          } else if (msg.type === 'done') {
+            cursorEl.innerHTML = '';
+          } else if (msg.type === 'error') {
+            outputEl.innerHTML += `<span class="loss">ERROR: ${escapeHtml(msg.content)}</span>`;
+          }
+        } catch (_) {}
+      }
+    }
+
+  } catch (err) {
+    // Demo mode: simulate a streaming response
+    await simulateDemoMode(outputEl, cursorEl, symbol, query);
+  }
+
+  // Cleanup
+  cursorEl.innerHTML = '';
+  state.isStreaming = false;
+  document.getElementById('analyze-btn').disabled = false;
+  document.getElementById('thinking-dot').classList.add('hidden');
+  document.getElementById('query-input').value = '';
+}
+
+// ── DEMO MODE (when backend not running) ────────────────────
+async function simulateDemoMode(outputEl, cursorEl, symbol, query) {
+  const steps = [
+    `Analyzing ${symbol}: ${query}\n\n`,
+    `Observing price action — checking for key technical levels...\n`,
+    `Hypothesis: possible momentum setup detected. Verifying with RSI.\n\n`,
+    `<span class="tool-call">⚡ TOOL → compute_rsi</span>\n`,
+    `<div class="json-block">{\n  "symbol": "${symbol}",\n  "rsi": 62.4,\n  "zone": "bullish_territory",\n  "signal_bias": "momentum_continuation"\n}</div>`,
+    `\nRSI at 62.4 — bullish territory, not yet overbought. Momentum intact.\n`,
+    `Checking volume profile and order flow.\n`,
+    `<span class="tool-call">⚡ TOOL → get_market_data</span>\n`,
+    `<div class="json-block">{\n  "symbol": "${symbol}",\n  "data": {\n    "volume": {"vol_ratio": 2.3, "current_vol": 45200000},\n    "order_flow": {"net_flow_$M": 87.4, "buy_pct": 63.2}\n  }\n}</div>`,
+    `\nVolume 2.3x average with 63% buy-side order flow — institutional accumulation pattern.\n\n`,
+    `SIGNAL: <span class="signal-bullish">Bullish momentum confirmed.</span>\n`,
+    `Entry: current market price\n`,
+    `Stop: -2.5% (below recent swing low)\n`,
+    `Target: +5% (measured move from breakout)\n`,
+    `Confidence: HIGH | Holding period: 2-5 sessions\n`,
+  ];
+
+  for (const step of steps) {
+    await new Promise(r => setTimeout(r, 180 + Math.random() * 200));
+    outputEl.innerHTML += step;
+  }
+
+  // Log a signal
+  addSignalToLog(`Bullish momentum confirmed for ${symbol}`);
+}
+
+// ── AUDIT ENGINE ─────────────────────────────────────────────
+function showAuditModal() {
+  document.getElementById('audit-modal').classList.remove('hidden');
+  document.getElementById('audit-init').classList.remove('hidden');
+  document.getElementById('audit-results').classList.add('hidden');
+  document.getElementById('audit-loading').classList.add('hidden');
+}
+
+function closeAuditModal() {
+  document.getElementById('audit-modal').classList.add('hidden');
+}
+
+async function triggerAudit(csvPath) {
+  const init = document.getElementById('audit-init');
+  const loading = document.getElementById('audit-loading');
+  const results = document.getElementById('audit-results');
+
+  init.classList.add('hidden');
+  loading.classList.remove('hidden');
+
+  try {
+    const symbol = document.getElementById('symbol-input').value;
+    const response = await fetch('/audit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ symbol, csv_path: csvPath })
+    });
+
+    if (!response.ok) throw new Error('Audit failed');
+    const data = await response.json();
+
+    if (data.error) throw new Error(data.error);
+
+    // Populate Results
+    document.getElementById('audit-winrate').textContent = data.stats.win_rate_pct + '%';
+    document.getElementById('audit-samples').textContent = data.metadata.samples_processed;
+    document.getElementById('audit-pnl').textContent = '$' + data.stats.avg_profit_per_signal;
+    document.getElementById('audit-expectancy').textContent = data.stats.expectancy;
+
+    const trades = data.trades;
+    const buys = trades.filter(t => t.signal === 'BULLISH').length;
+    const sells = trades.filter(t => t.signal === 'BEARISH').length;
+    const neutrals = trades.filter(t => t.signal === 'NEUTRAL').length;
+
+    document.getElementById('audit-buys').textContent = buys;
+    document.getElementById('audit-sells').textContent = sells;
+    document.getElementById('audit-neutrals').textContent = neutrals;
+
+    // Set Examples
+    const winEx = trades.find(t => t.win);
+    const lossEx = trades.find(t => !t.win && t.signal !== 'NEUTRAL');
+
+    if (winEx) {
+      document.getElementById('audit-win-ex').textContent = `[${winEx.timestamp}] ${winEx.signal} @ ${winEx.price_at_signal} -> Result: ${winEx.future_price} (Correct)`;
+    }
+    if (lossEx) {
+      document.getElementById('audit-loss-ex').textContent = `[${lossEx.timestamp}] ${lossEx.signal} @ ${lossEx.price_at_signal} -> Result: ${lossEx.future_price} (Incorrect)`;
+    }
+
+    loading.classList.add('hidden');
+    results.classList.remove('hidden');
+
+  } catch (err) {
+    alert('Audit Error: ' + err.message);
+    showAuditModal();
+  }
+}
+
+// ── KEYBOARD SHORTCUT ────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) runAnalysis();
+});
+</script>
+</body>
+</html>

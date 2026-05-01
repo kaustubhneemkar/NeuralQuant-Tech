@@ -1,0 +1,35 @@
+# ═══════════════════════════════════════════════════════════════
+# Alpha-Lens | requirements.txt
+# Essential dependencies only — grouped by component
+# ═══════════════════════════════════════════════════════════════
+
+# ── MCP Server ──────────────────────────────────────────────
+mcp>=1.0.0                     # Model Context Protocol Python SDK
+
+# ── API Backend ─────────────────────────────────────────────
+fastapi>=0.111.0
+uvicorn[standard]>=0.30.0
+pydantic>=2.7.0
+python-multipart>=0.0.9        # For file uploads (future: upload CSV data)
+
+# ── Fine-Tuning Core ────────────────────────────────────────
+torch>=2.2.0                   # PyTorch — CUDA build recommended
+transformers>=4.40.0           # HuggingFace model hub + training
+datasets>=2.19.0               # Dataset loading and processing
+trl>=0.8.6                     # SFTTrainer for instruction fine-tuning
+peft>=0.10.0                   # LoRA / QLoRA adapters
+accelerate>=0.29.0             # Multi-GPU + mixed precision training
+bitsandbytes>=0.43.0           # 4-bit / 8-bit quantization (QLoRA)
+
+# ── Optional: 2x faster training (Linux + CUDA only) ────────
+# unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git
+
+# ── LLM API Client (demo / fallback mode) ───────────────────
+anthropic>=0.28.0
+
+# ── Utilities ───────────────────────────────────────────────
+numpy>=1.26.0
+pandas>=2.2.0                  # For CSV market data ingestion
+yfinance>=0.2.40               # For live market data fetching
+httpx>=0.27.0                  # Async HTTP (used by FastAPI test client)
+python-dotenv>=1.0.0           # .env file for API keys

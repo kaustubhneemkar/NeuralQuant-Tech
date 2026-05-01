@@ -1,0 +1,34 @@
+{
+  "metadata": {
+    "dataset_abs_path": "C:\\alpha-lens\\data\\gold_data_1h_cleaned.csv",
+    "sample_pct": 0.4,
+    "total_possible_rows": 11313,
+    "samples_processed": 2,
+    "api_calls_saved": 6788,
+    "timestamp": "2026-05-01 15:37:32.607471"
+  },
+  "stats": {
+    "win_rate_pct": 100.0,
+    "total_pnl": 16.7
+  },
+  "trades": [
+    {
+      "index": 101,
+      "timestamp": "2024-02-16 03:00:00-05:00",
+      "signal": "BULLISH",
+      "price_at_signal": 2016.5999755859373,
+      "future_price": 2025.5999755859373,
+      "pnl": 9.0,
+      "win": true
+    },
+    {
+      "index": 102,
+      "timestamp": "2024-02-16 04:00:00-05:00",
+      "signal": "BULLISH",
+      "price_at_signal": 2016.699951171875,
+      "future_price": 2024.4000244140625,
+      "pnl": 7.7,
+      "win": true
+    }
+  ]
+}

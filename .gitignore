@@ -1,0 +1,39 @@
+# ── Environment & secrets ──────────────────────────────────────
+.env
+problem&sol.txt
+
+# ── Python ─────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# ── Virtual environments ────────────────────────────────────────
+venv/
+.venv/
+env/
+.env/
+
+# ── Model checkpoints (large binaries) ─────────────────────────
+checkpoints/
+*.pt
+*.bin
+*.safetensors
+
+# ── IDE ─────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ── OS ──────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Logs ────────────────────────────────────────────────────────
+*.log
+logs/

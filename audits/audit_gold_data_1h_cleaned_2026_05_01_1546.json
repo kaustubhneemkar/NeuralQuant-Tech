@@ -1,0 +1,65 @@
+{
+  "metadata": {
+    "dataset_abs_path": "C:\\alpha-lens\\data\\gold_data_1h_cleaned.csv",
+    "sample_pct": 0.4,
+    "total_possible_rows": 11313,
+    "samples_processed": 5,
+    "api_calls_saved": 11308,
+    "timestamp": "2026-05-01 15:46:43.908999"
+  },
+  "stats": {
+    "win_rate_pct": 20.0,
+    "total_pnl": 55.8,
+    "avg_profit_per_signal": 11.16,
+    "expectancy": 11.16,
+    "avg_win": 55.8,
+    "avg_loss": 0
+  },
+  "trades": [
+    {
+      "index": 1786,
+      "timestamp": "2024-06-03 09:00:00-04:00",
+      "signal": "NEUTRAL",
+      "price_at_signal": 2354.10009765625,
+      "future_price": 2370.800048828125,
+      "pnl": 0.0,
+      "win": false
+    },
+    {
+      "index": 3828,
+      "timestamp": "2024-10-10 00:00:00-04:00",
+      "signal": "NEUTRAL",
+      "price_at_signal": 2631.0,
+      "future_price": 2642.5,
+      "pnl": 0.0,
+      "win": false
+    },
+    {
+      "index": 4028,
+      "timestamp": "2024-10-22 16:00:00-04:00",
+      "signal": "NEUTRAL",
+      "price_at_signal": 2763.10009765625,
+      "future_price": 2769.0,
+      "pnl": 0.0,
+      "win": false
+    },
+    {
+      "index": 5565,
+      "timestamp": "2025-01-31 04:00:00-05:00",
+      "signal": "NEUTRAL",
+      "price_at_signal": 2845.699951171875,
+      "future_price": 2828.60009765625,
+      "pnl": 0.0,
+      "win": false
+    },
+    {
+      "index": 6796,
+      "timestamp": "2025-04-17 16:00:00-04:00",
+      "signal": "BULLISH",
+      "price_at_signal": 3341.300048828125,
+      "future_price": 3397.10009765625,
+      "pnl": 55.8,
+      "win": true
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "metadata": {
+    "dataset_abs_path": "C:\\alpha-lens\\data\\gold_data_1h_cleaned.csv",
+    "sample_pct": 0.4,
+    "total_possible_rows": 11313,
+    "samples_processed": 0,
+    "api_calls_saved": 6788,
+    "timestamp": "2026-05-01 15:15:20.369694"
+  },
+  "stats": {
+    "win_rate_pct": 0,
+    "total_pnl": 0.0
+  },
+  "trades": []
+}
