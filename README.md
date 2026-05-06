@@ -20,19 +20,19 @@ The answer is **yes**, and this project is the proof-of-concept. It is designed 
 ---
 
 ## ⚙️ Core Functions
-
-| Function | What it does |
-|---|---|
+-----------------------------------------------------------------------------------------------------------------------------------------------------
+|       Function            |                                          What it does                                                                 |
+|---------------------------|-----------------------------------------------------------------------------------------------------------------------|
 | **Market Data Retrieval** | Fetches **live market data** for any symbol (AAPL, TSLA, BTC-USD) via `yfinance`, with a local CSV fallback for Gold. |
-| **Backtesting Mode** | Allows "Time-Travel" through historical CSVs to evaluate agent performance over past market cycles. |
-| **Momentum Analysis** | Computes RSI (Relative Strength Index) to detect overbought/oversold conditions |
-| **Trend Analysis** | Computes MACD and its histogram to identify trend direction and strength |
-| **Volatility Analysis** | Calculates Bollinger Bands — flags squeeze setups (potential breakouts) |
-| **Level Detection** | Detects key Support & Resistance levels from swing highs/lows |
-| **Order Book Simulation** | Simulates Level 2 bid/ask depth to reveal immediate supply/demand imbalance |
-| **Signal Generation** | Synthesizes all tool outputs into a single **Bullish / Bearish / Neutral** verdict |
-| **Streaming Reasoning** | Broadcasts the agent's live ReAct reasoning chain to the browser token-by-token |
-
+| **Backtesting Mode**      | Allows "Time-Travel" through historical CSVs to evaluate agent performance over past market cycles.                   |
+| **Momentum Analysis**     | Computes RSI (Relative Strength Index) to detect overbought/oversold conditions                                       |
+| **Trend Analysis**        | Computes MACD and its histogram to identify trend direction and strength                                              |
+| **Volatility Analysis**   | Calculates Bollinger Bands — flags squeeze setups (potential breakouts)                                               |
+| **Level Detection**       | Detects key Support & Resistance levels from swing highs/lows                                                         |
+| **Order Book Simulation** | Simulates Level 2 bid/ask depth to reveal immediate supply/demand imbalance                                           |
+| **Signal Generation**     | Synthesizes all tool outputs into a single **Bullish / Bearish / Neutral** verdict                                    |
+| **Streaming Reasoning**   | Broadcasts the agent's live ReAct reasoning chain to the browser token-by-token                                       |
+-----------------------------------------------------------------------------------------------------------------------------------------------------
 ---
 
 ## 🔄 Workflow
@@ -42,8 +42,8 @@ This is how a single analysis request flows through the system, end to end:
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  1. USER INPUT                                              │
-│     User enters a symbol (e.g. GOLD) and a query           │
-│     (e.g. "detect momentum breakout") in the browser UI.   │
+│     User enters a symbol (e.g. GOLD) and a query            │
+│     (e.g. "detect momentum breakout") in the browser UI.    │
 └────────────────────────┬────────────────────────────────────┘
                          │ HTTP POST /analyze/stream
                          ▼
@@ -58,29 +58,29 @@ This is how a single analysis request flows through the system, end to end:
 ┌─────────────────────────────────────────────────────────────┐
 │  3. ReAct Agent Loop (agent/runner.py)                      │
 │                                                             │
-│   ┌─ OBSERVE ──────────────────────────────────────────┐   │
-│   │  Agent sends query + system prompt to Gemini LLM.  │   │
-│   │  LLM reasons about what data it needs.             │   │
-│   └──────────────────────┬─────────────────────────────┘   │
+│   ┌─ OBSERVE ──────────────────────────────────────────┐    │
+│   │  Agent sends query + system prompt to Gemini LLM.  │    │
+│   │  LLM reasons about what data it needs.             │    │
+│   └──────────────────────┬─────────────────────────────┘    │
 │                          │ LLM emits <tool_call> tags       │
-│   ┌─ CALL TOOLS ─────────▼─────────────────────────────┐   │
-│   │  Runner intercepts tags, dispatches each call to   │   │
-│   │  the MCP Server subprocess via the MCP SDK.        │   │
-│   │  Results are streamed live to the browser.         │   │
-│   └──────────────────────┬─────────────────────────────┘   │
+│   ┌─ CALL TOOLS ─────────▼─────────────────────────────┐    │
+│   │  Runner intercepts tags, dispatches each call to   │    │
+│   │  the MCP Server subprocess via the MCP SDK.        │    │
+│   │  Results are streamed live to the browser.         │    │
+│   └──────────────────────┬─────────────────────────────┘    │
 │                          │ tool results fed back to LLM     │
-│   ┌─ SYNTHESIZE ─────────▼─────────────────────────────┐   │
-│   │  LLM reads all tool results, forms a conclusion,   │   │
-│   │  and emits a final SIGNAL: Bullish/Bearish/Neutral │   │
-│   └────────────────────────────────────────────────────┘   │
+│   ┌─ SYNTHESIZE ─────────▼─────────────────────────────┐    │
+│   │  LLM reads all tool results, forms a conclusion,   │    │
+│   │  and emits a final SIGNAL: Bullish/Bearish/Neutral │    │
+│   └────────────────────────────────────────────────────┘    │
 │                                                             │
-│   Loop repeats up to 5 times if the LLM needs more data.   │
+│   Loop repeats up to 5 times if the LLM needs more data.    │
 └────────────────────────┬────────────────────────────────────┘
                          │
                          ▼
 ┌─────────────────────────────────────────────────────────────┐
 │  4. MCP Server (mcp_server/server.py)                       │
-│     A persistent subprocess that implements the 6 tools.   │
+│     A persistent subprocess that implements the 6 tools.    │
 │     Reads from the local CSV, computes indicators using     │
 │     pure Python math, returns structured JSON results.      │
 └────────────────────────┬────────────────────────────────────┘
@@ -88,8 +88,8 @@ This is how a single analysis request flows through the system, end to end:
                          ▼
 ┌─────────────────────────────────────────────────────────────┐
 │  5. Browser Dashboard (ui/index.html)                       │
-│     Renders the reasoning chain live: text → tool badges   │
-│     → JSON results → final colour-coded SIGNAL. Logs all   │
+│     Renders the reasoning chain live: text → tool badges    │
+│     → JSON results → final colour-coded SIGNAL. Logs all    │
 │     signals in the sidebar with timestamps.                 │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -175,16 +175,16 @@ python agent/runner.py
 ---
 
 ## 🛠️ Available MCP Tools
-
-| Tool | Description |
-|------|-------------|
-| `get_market_data` | Fetch current price and volume for **ANY** symbol (AAPL, BTC-USD, GOLD) |
-| `compute_rsi` | RSI for any symbol — overbought >70, oversold <30 |
-| `compute_macd` | MACD trend indicator for any symbol |
-| `compute_bollinger` | Bollinger Bands for any symbol |
-| `detect_support_resistance` | Support/Resistance levels for any symbol |
-| `get_order_book` | Simulated Level 2 bid/ask imbalance |
-
+---------------------------------------------------------------------------------------------------------
+|           Tool              |                      Description                                        |
+|-----------------------------|-------------------------------------------------------------------------|
+| `get_market_data`           | Fetch current price and volume for **ANY** symbol (AAPL, BTC-USD, GOLD) |
+| `compute_rsi`               | RSI for any symbol — overbought >70, oversold <30                       |
+| `compute_macd`              | MACD trend indicator for any symbol                                     |
+| `compute_bollinger`         | Bollinger Bands for any symbol                                          |
+| `detect_support_resistance` | Support/Resistance levels for any symbol                                |
+| `get_order_book`            | Simulated Level 2 bid/ask imbalance                                     |
+---------------------------------------------------------------------------------------------------------
 ---
 
 ## 🧪 High-Fidelity Backtesting
@@ -226,15 +226,15 @@ To prevent confusion when interpreting the Performance Certificate:
 ---
 
 ## 🏗️ Architecture
-
-| Component | File | Purpose |
-|-----------|------|---------|
-| 🧠 Agent | `agent/runner.py` | ReAct loop — Observe → Hypothesize → Call Tools → Signal |
-| 🤝 MCP Server | `mcp_server/server.py` | Tool provider via MCP Python SDK |
-| 🌐 API | `api/main.py` | FastAPI + SSE streaming to browser |
-| 🖥️ UI | `ui/index.html` | Terminal-aesthetic quant dashboard |
-| 📊 Data | `data/gold_data_1h_cleaned.csv` | Real hourly Gold OHLCV 2024–2026 |
-
+--------------------------------------------------------------------------------------------------------------
+| Component      |            File                 |                   Purpose                               |
+|----------------|---------------------------------|---------------------------------------------------------|
+| 🧠 Agent      | `agent/runner.py`               | ReAct loop — Observe → Hypothesize → Call Tools → Signal |
+| 🤝 MCP Server | `mcp_server/server.py`          | Tool provider via MCP Python SDK                         |
+| 🌐 API        | `api/main.py`                   | FastAPI + SSE streaming to browser                       |
+| 🖥️ UI         | `ui/index.html`                 | Terminal-aesthetic quant dashboard                       |
+| 📊 Data       | `data/gold_data_1h_cleaned.csv` | Real hourly Gold OHLCV 2024–2026                         |
+--------------------------------------------------------------------------------------------------------------
 ---
 
 ## Why This Architecture?
