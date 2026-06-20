@@ -127,6 +127,9 @@ async def run_backtest(csv_path="data/gold_data_1h_cleaned.csv", sample_pct=0.40
     trades = []
     wins = 0
     total_pnl = 0.0
+    cum_pnl = 0.0
+    cum_pnl_series = []
+    active_returns = []
     
     for res in results:
         idx = res["index"]
@@ -145,9 +148,67 @@ async def run_backtest(csv_path="data/gold_data_1h_cleaned.csv", sample_pct=0.40
         
         if win: wins += 1
         total_pnl += pnl
-        trades.append({**res, "future_price": future_price, "pnl": round(pnl, 2), "win": win})
+        cum_pnl += pnl
+        
+        trade_data = {
+            **res,
+            "future_price": future_price,
+            "pnl": round(pnl, 2),
+            "win": win,
+            "cumulative_pnl": round(cum_pnl, 2)
+        }
+        trades.append(trade_data)
+        
+        cum_pnl_series.append({
+            "timestamp": res["timestamp"],
+            "cumulative_pnl": round(cum_pnl, 2)
+        })
+        
+        if res["signal"] in ["BULLISH", "BEARISH"]:
+            active_returns.append(pnl / res["price_at_signal"])
 
-    # 5. Reporting
+    # 5. Sharpe and Sortino Ratios
+    import math
+    sharpe_ratio = 0.0
+    sortino_ratio = 0.0
+    
+    if len(active_returns) > 1:
+        mean_ret = sum(active_returns) / len(active_returns)
+        var_ret = sum((r - mean_ret) ** 2 for r in active_returns) / (len(active_returns) - 1)
+        std_ret = math.sqrt(var_ret)
+        
+        if std_ret > 0:
+            sharpe_ratio = (mean_ret / std_ret) * math.sqrt(252)
+            
+        downside_returns = [r for r in active_returns if r < 0]
+        if len(downside_returns) > 1:
+            downside_var = sum(r ** 2 for r in downside_returns) / len(downside_returns)
+            downside_std = math.sqrt(downside_var)
+            if downside_std > 0:
+                sortino_ratio = (mean_ret / downside_std) * math.sqrt(252)
+        elif len(downside_returns) == 1:
+            downside_std = abs(downside_returns[0])
+            if downside_std > 0:
+                sortino_ratio = (mean_ret / downside_std) * math.sqrt(252)
+                
+    # 6. Max Drawdown
+    equity = 10000.0
+    equity_curve = [equity]
+    for t in trades:
+        equity += t["pnl"]
+        equity_curve.append(equity)
+        
+    peak = equity_curve[0]
+    max_dd_fraction = 0.0
+    for eq in equity_curve:
+        if eq > peak:
+            peak = eq
+        dd = (peak - eq) / peak if peak > 0 else 0.0
+        if dd > max_dd_fraction:
+            max_dd_fraction = dd
+    max_dd_pct = max_dd_fraction * 100
+
+    # 7. Reporting
     total_trades = len(trades)
     win_rate_val = (wins / total_trades) if total_trades > 0 else 0
     loss_rate_val = 1 - win_rate_val
@@ -177,8 +238,12 @@ async def run_backtest(csv_path="data/gold_data_1h_cleaned.csv", sample_pct=0.40
             "avg_profit_per_signal": round(avg_profit_per_signal, 2),
             "expectancy": round(expectancy, 2),
             "avg_win": round(avg_win, 2),
-            "avg_loss": round(avg_loss, 2)
+            "avg_loss": round(avg_loss, 2),
+            "sharpe_ratio": round(sharpe_ratio, 2),
+            "sortino_ratio": round(sortino_ratio, 2),
+            "max_drawdown_pct": round(max_dd_pct, 2)
         },
+        "cumulative_pnl_series": cum_pnl_series,
         "trades": trades
     }
 

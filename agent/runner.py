@@ -108,18 +108,91 @@ class MCPToolDispatcher:
             self.client_session = None
 
 class AlphaLensAgent:
+    """
+    ReAct agent with automatic API key rotation.
+    Loads all GOOGLE_API_KEY* variables from .env and cycles through them
+    when a key hits its quota limit (429 RESOURCE_EXHAUSTED).
+    """
     def __init__(self, use_local_model: bool = False):
         self.dispatcher = MCPToolDispatcher()
         self.use_local = use_local_model and LOCAL_MODEL_AVAILABLE and CHECKPOINT_DIR.exists()
         self.history = []
 
         if not self.use_local:
-            api_key = os.getenv("GOOGLE_API_KEY")
-            print(f"DEBUG: API Key Loaded: {bool(api_key)}")
-            if not api_key:
-                raise ValueError("GOOGLE_API_KEY missing from .env file.")
-            self.client = genai.Client(api_key=api_key)
+            # Load all available API keys from environment
+            self._api_keys = []
+            primary = os.getenv("GOOGLE_API_KEY")
+            if primary:
+                self._api_keys.append(primary)
+
+            # Scan for GOOGLE_API_KEY_2, _3, _4, ... up to _10
+            for i in range(2, 11):
+                key = os.getenv(f"GOOGLE_API_KEY_{i}")
+                if key:
+                    self._api_keys.append(key)
+
+            if not self._api_keys:
+                raise ValueError("No GOOGLE_API_KEY found in .env file. Add at least one key.")
+
+            print(f"[KeyPool] Loaded {len(self._api_keys)} API key(s) for failover rotation.")
+
+            self._current_key_index = 0
             self.model_id = "gemini-2.5-flash"
+            self.client = genai.Client(api_key=self._api_keys[0])
+
+    def _rotate_key(self) -> bool:
+        """
+        Rotate to the next API key in the pool.
+        Returns True if a new key was activated, False if all keys are exhausted.
+        """
+        next_index = (self._current_key_index + 1) % len(self._api_keys)
+
+        # If we've looped back to the starting key, all keys are exhausted
+        if next_index == self._current_key_index and len(self._api_keys) > 1:
+            return False
+
+        self._current_key_index = next_index
+        self.client = genai.Client(api_key=self._api_keys[self._current_key_index])
+        print(f"[KeyPool] Rotated to API key #{self._current_key_index + 1}/{len(self._api_keys)}")
+        return True
+
+    async def _call_llm_with_failover(self):
+        """
+        Call the LLM, automatically rotating keys on quota errors.
+        Tries each key once before giving up.
+        """
+        attempts = 0
+        max_attempts = len(self._api_keys)
+        last_error = None
+
+        while attempts < max_attempts:
+            try:
+                response = self.client.models.generate_content(
+                    model=self.model_id,
+                    contents=self.history,
+                    config={'system_instruction': SYSTEM_PROMPT}
+                )
+                return response
+            except Exception as e:
+                error_str = str(e)
+                if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str or "quota" in error_str.lower():
+                    attempts += 1
+                    last_error = e
+                    print(f"[KeyPool] Key #{self._current_key_index + 1} quota exhausted: {error_str[:80]}")
+                    if attempts < max_attempts:
+                        rotated = self._rotate_key()
+                        if not rotated:
+                            break
+                        # Brief pause before retrying with new key
+                        await asyncio.sleep(1)
+                    continue
+                else:
+                    # Non-quota error — raise immediately
+                    raise e
+
+        raise Exception(
+            f"All {len(self._api_keys)} API keys exhausted. Last error: {last_error}"
+        )
 
     async def analyze(self, query: str) -> AsyncGenerator[str, None]:
         # Add user query to history
@@ -127,12 +200,8 @@ class AlphaLensAgent:
         
         # Limit ReAct loop to 5 iterations to prevent infinite tool loops
         for _ in range(5):
-            # 1. Generate Response
-            response = self.client.models.generate_content(
-                model=self.model_id,
-                contents=self.history,
-                config={'system_instruction': SYSTEM_PROMPT}
-            )
+            # 1. Generate Response (with automatic key rotation)
+            response = await self._call_llm_with_failover()
             
             response_text = response.text
             tool_matches = list(TOOL_CALL_PATTERN.finditer(response_text))

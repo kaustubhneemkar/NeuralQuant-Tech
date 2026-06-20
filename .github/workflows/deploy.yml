@@ -1,0 +1,48 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v3
+
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install Linting & Testing Tools
+      run: |
+        python -m pip install --upgrade pip
+        pip install flake8 pytest pytest-asyncio httpx fastapi pydantic uvicorn pandas yfinance mcp
+
+    - name: Run Linting Checks
+      run: |
+        # stop the build if there are Python syntax errors or undefined names
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        # exit-zero treats all errors as warnings
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+    - name: Run Pytest Suite
+      run: |
+        # Set dummy env key for tests
+        export GOOGLE_API_KEY="dummy-key-for-testing"
+        pytest
+
+    - name: Setup Docker Buildx
+      uses: docker/setup-buildx-action@v2
+
+    - name: Verify Docker Image Build
+      uses: docker/build-push-action@v4
+      with:
+        context: .
+        push: false
+        tags: alpha-lens:latest

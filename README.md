@@ -251,24 +251,109 @@ To prevent confusion when interpreting the Performance Certificate:
 
 ```
 alpha-lens/
+├── .github/
+│   └── workflows/
+│       └── deploy.yml          # CI/CD pipeline (lint → test → Docker build)
 ├── mcp_server/
 │   ├── __init__.py
-│   └── server.py            # MCP tool server (RSI, MACD, Bollinger, S/R, order book)
+│   └── server.py               # MCP tool server (RSI, MACD, Bollinger, S/R, order book)
 ├── agent/
-│   └── runner.py            # ReAct agent loop
+│   ├── runner.py               # ReAct agent loop
+│   ├── backtester.py           # Time-travel backtester with Sharpe/Sortino/MDD
+│   └── audit.py                # Performance Certificate generator
 ├── api/
-│   └── main.py              # FastAPI + SSE endpoints
+│   └── main.py                 # FastAPI + SSE endpoints
 ├── ui/
-│   └── index.html           # Single-file terminal dashboard
+│   └── index.html              # Single-file terminal dashboard + Paper Trading
+├── tests/
+│   ├── test_mcp_tools.py       # Unit tests for quant indicator math
+│   └── test_api.py             # Integration tests for API endpoints
 ├── scripts/
-│   └── finetune.py          # QLoRA fine-tuning pipeline (GPU required)
+│   └── finetune.py             # QLoRA fine-tuning pipeline (GPU required)
 ├── data/
 │   └── gold_data_1h_cleaned.csv
+├── Dockerfile                  # Production container definition
+├── docker-compose.yml          # Local orchestration
+├── .dockerignore
+├── deploy_gcp.md               # Google Cloud Run deployment handbook
 ├── requirements.txt
-├── .env.example             # Copy this → .env and add your API key
+├── .env.example                # Copy this → .env and add your API key
 ├── .gitignore
 └── README.md
 ```
+
+---
+
+## 🐳 Docker Deployment
+
+Run Alpha-Lens in a container with a single command:
+
+```bash
+# Build the image
+docker build -t alpha-lens .
+
+# Run with your API key
+docker run -p 8000:8000 --env-file .env alpha-lens
+
+# Or use Docker Compose
+docker-compose up --build
+```
+
+For **Google Cloud Run** deployment, see [deploy_gcp.md](deploy_gcp.md) for a complete step-by-step guide covering Artifact Registry, Cloud Build, Secret Manager, and Cloud Run.
+
+---
+
+## 🔄 CI/CD Pipeline
+
+Every push to `main` triggers the GitHub Actions workflow (`.github/workflows/deploy.yml`):
+
+1. **Lint** — `flake8` catches syntax errors and undefined names
+2. **Test** — `pytest` runs the full unit + integration test suite
+3. **Build** — Validates the Docker image compiles successfully
+
+---
+
+## 💹 Paper Trading Simulator
+
+The dashboard includes a built-in paper trading simulator in the right sidebar:
+
+- **Virtual $10,000 balance** — starts fresh, persisted across page reloads via `localStorage`
+- **Signal-driven trading** — When the agent emits a Bullish/Bearish signal, a trade execution button appears
+- **Position tracking** — Shows entry price, side (LONG/SHORT), and live unrealized PnL
+- **Close positions** — Manually close positions and see the realized profit/loss reflected in your balance
+
+---
+
+## 📈 Advanced Quantitative Metrics
+
+The backtesting and audit engine reports professional-grade financial metrics:
+
+| Metric | Description |
+|--------|-------------|
+| **Sharpe Ratio** | Annualized risk-adjusted return (higher = better) |
+| **Sortino Ratio** | Like Sharpe but penalizes only downside risk |
+| **Max Drawdown** | Largest peak-to-trough decline (lower = safer) |
+| **Strategy Expectancy** | Average $ expected per signal over time |
+| **Equity Curve** | Interactive Chart.js visualization in the Audit modal |
+
+---
+
+## 🧪 Testing
+
+```bash
+# Run the full test suite
+python -m pytest
+
+# With verbose output
+python -m pytest -v
+```
+
+**11 tests** covering:
+- RSI boundary conditions (overbought/oversold/insufficient data)
+- MACD trend direction and data requirements
+- Bollinger Band squeeze detection
+- Support/Resistance swing-high/low logic
+- FastAPI endpoint health, tool listing, and UI serving
 
 ---
 
@@ -289,3 +374,4 @@ See `problem&sol.txt` (git-ignored) for a full log of issues encountered and how
 python scripts/finetune.py
 # Saves LoRA adapter to ./checkpoints/alpha-lens-llama3/
 ```
+

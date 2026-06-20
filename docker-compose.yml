@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  alpha-lens:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: alpha-lens-app
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./audits:/app/audits
+      - ./checkpoints:/app/checkpoints
+    restart: unless-stopped

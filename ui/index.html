@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Alpha-Lens | Quant Analysis Agent</title>
 <script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@300;400;600;700&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet" />
 <style>
@@ -498,10 +499,33 @@
                </div>
              </div>
 
+             <div class="grid grid-cols-3 gap-4">
+               <div class="metric-card">
+                 <div class="mono text-[10px]" style="color:#2a5040;">SHARPE RATIO</div>
+                 <div class="orb text-lg warn" id="audit-sharpe">0.00</div>
+               </div>
+               <div class="metric-card">
+                 <div class="mono text-[10px]" style="color:#2a5040;">SORTINO RATIO</div>
+                 <div class="orb text-lg warn" id="audit-sortino">0.00</div>
+               </div>
+               <div class="metric-card">
+                 <div class="mono text-[10px]" style="color:#2a5040;">MAX DRAWDOWN</div>
+                 <div class="orb text-lg loss" id="audit-mdd">0.00%</div>
+               </div>
+             </div>
+
              <div class="metric-card border-warn/20">
                 <div class="mono text-[10px]" style="color:#2a5040;">STRATEGY EXPECTANCY</div>
                 <div class="orb text-xl warn" id="audit-expectancy">0.00</div>
                 <div class="mono text-[9px] mt-1" style="color:#2a4030;">(Win% × AvgWin) - (Loss% × AvgLoss)</div>
+             </div>
+
+             <!-- Chart.js Equity Curve -->
+             <div class="panel p-4 bg-black/40">
+                <div class="mono text-xs acid mb-3 tracking-widest">EQUITY CURVE (CUMULATIVE PnL)</div>
+                <div style="height: 180px; position: relative;">
+                  <canvas id="audit-chart"></canvas>
+                </div>
              </div>
 
              <div class="panel p-4 bg-black/40">
@@ -555,12 +579,39 @@
 
   <!-- ── RIGHT SIDEBAR ── -->
   <aside class="panel w-52 shrink-0 border-l" style="border-top:none;">
-    <div class="p-4">
+    <div class="p-4 border-b" style="border-color:var(--border);">
       <div class="mono text-xs acid mb-3 tracking-widest flex items-center gap-2">
         <span>◈</span> SIGNAL LOG
       </div>
       <div id="signal-log" class="space-y-2 mono text-xs" style="color:#2a4055;">
         <div>No signals yet...</div>
+      </div>
+    </div>
+
+    <!-- Paper Trading Simulator -->
+    <div class="p-4 border-b" style="border-color:var(--border);">
+      <div class="mono text-xs acid mb-3 tracking-widest flex items-center gap-2">
+        <span>◈</span> PAPER TRADING
+      </div>
+      <div class="space-y-2">
+        <div class="metric-card" style="background:rgba(0,255,136,0.02); padding: 8px 10px;">
+          <div class="mono text-[10px]" style="color:#2a5040;">BALANCE</div>
+          <div class="orb text-sm acid" id="wallet-balance">$10,000.00</div>
+        </div>
+        <div class="metric-card" style="background:rgba(0,255,136,0.02); padding: 8px 10px;">
+          <div class="mono text-[10px]" style="color:#2a5040;">POSITION</div>
+          <div class="mono text-[11px] bright" id="wallet-position">NONE</div>
+          <div class="mono text-[11px] mt-1 font-bold" id="wallet-unrealized-pnl" style="display:none;">PnL: --</div>
+          <button id="close-position-btn" class="w-full mt-2 text-[10px] bg-red-950 border border-red-500 text-red-400 py-1 font-bold hover:bg-red-900 transition-colors hidden" onclick="closePosition()">
+            CLOSE POSITION
+          </button>
+        </div>
+        <div id="paper-actions" class="hidden space-y-1">
+          <div class="mono text-[9px]" style="color:#2a5040;">ACTIVE SIGNAL: <span id="active-signal-label" class="acid">BULLISH</span></div>
+          <button class="w-full text-[10px] bg-green-950 border border-green-500 text-green-400 py-1 font-bold hover:bg-green-900 transition-colors" onclick="executePaperTrade()">
+            EXECUTE TRADE (10 UNITS)
+          </button>
+        </div>
       </div>
     </div>
 
@@ -591,7 +642,132 @@ const state = {
   toolCallCount:  0,
   isStreaming:    false,
   signals:        [],
+  latestSymbol:   null,
+  latestPrice:    null,
+  latestSignal:   null
 };
+
+// ── PAPER TRADING LOCAL STORAGE ──────────────────────────────
+const wallet = {
+  balance: parseFloat(localStorage.getItem('alpha_lens_balance')) || 10000.0,
+  position: JSON.parse(localStorage.getItem('alpha_lens_position')) || null,
+  realizedPnl: parseFloat(localStorage.getItem('alpha_lens_realized_pnl')) || 0.0,
+  trades: JSON.parse(localStorage.getItem('alpha_lens_trades')) || []
+};
+
+function updateWalletUI() {
+  document.getElementById('wallet-balance').textContent = '$' + wallet.balance.toFixed(2);
+  const posEl = document.getElementById('wallet-position');
+  const closeBtn = document.getElementById('close-position-btn');
+  const pnlEl = document.getElementById('wallet-unrealized-pnl');
+
+  if (wallet.position) {
+    posEl.innerHTML = `<span class="${wallet.position.side === 'LONG' ? 'acid font-bold' : 'loss font-bold'}">${wallet.position.side}</span> ${wallet.position.symbol} @ $${wallet.position.entryPrice.toFixed(2)}`;
+    closeBtn.classList.remove('hidden');
+    
+    if (state.latestPrice && state.latestSymbol === wallet.position.symbol) {
+      let diff = state.latestPrice - wallet.position.entryPrice;
+      if (wallet.position.side === 'SHORT') diff = -diff;
+      const unRealizedPnl = diff * wallet.position.size;
+      const pct = (diff / wallet.position.entryPrice) * 100;
+      pnlEl.textContent = `Unrealized: ${unRealizedPnl >= 0 ? '+' : ''}${unRealizedPnl.toFixed(2)} (${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%)`;
+      pnlEl.className = `mono text-[10px] mt-1 font-bold ${unRealizedPnl >= 0 ? 'acid' : 'loss'}`;
+      pnlEl.style.display = 'block';
+    } else {
+      pnlEl.style.display = 'none';
+    }
+  } else {
+    posEl.textContent = 'NONE';
+    closeBtn.classList.add('hidden');
+    pnlEl.style.display = 'none';
+  }
+}
+
+function executePaperTrade() {
+  if (wallet.position) {
+    alert("Please close your existing position first.");
+    return;
+  }
+  
+  if (!state.latestPrice || !state.latestSymbol) {
+    alert("No active price data found. Please run an analysis or select a symbol first.");
+    return;
+  }
+  
+  const side = state.latestSignal === 'BULLISH' ? 'LONG' : 'SHORT';
+  const size = 10;
+  
+  wallet.position = {
+    symbol: state.latestSymbol,
+    side: side,
+    entryPrice: state.latestPrice,
+    size: size
+  };
+  
+  wallet.trades.push({
+    timestamp: new Date().toLocaleTimeString(),
+    symbol: state.latestSymbol,
+    action: 'ENTRY (' + side + ')',
+    price: state.latestPrice,
+    size: size,
+    pnl: 0
+  });
+  
+  localStorage.setItem('alpha_lens_position', JSON.stringify(wallet.position));
+  localStorage.setItem('alpha_lens_trades', JSON.stringify(wallet.trades));
+  
+  document.getElementById('paper-actions').classList.add('hidden');
+  updateWalletUI();
+}
+
+function closePosition() {
+  if (!wallet.position) return;
+  
+  const closePrice = state.latestPrice || wallet.position.entryPrice;
+  let diff = closePrice - wallet.position.entryPrice;
+  if (wallet.position.side === 'SHORT') diff = -diff;
+  
+  const pnl = diff * wallet.position.size;
+  wallet.balance += pnl;
+  wallet.realizedPnl += pnl;
+  
+  wallet.trades.push({
+    timestamp: new Date().toLocaleTimeString(),
+    symbol: wallet.position.symbol,
+    action: 'EXIT',
+    price: closePrice,
+    size: wallet.position.size,
+    pnl: pnl
+  });
+  
+  wallet.position = null;
+  
+  localStorage.setItem('alpha_lens_balance', wallet.balance);
+  localStorage.setItem('alpha_lens_position', 'null');
+  localStorage.setItem('alpha_lens_realized_pnl', wallet.realizedPnl);
+  localStorage.setItem('alpha_lens_trades', JSON.stringify(wallet.trades));
+  
+  updateWalletUI();
+}
+
+function parsePriceFromJSON(jsonText) {
+  try {
+    const data = JSON.parse(jsonText);
+    if (data.symbol) {
+      state.latestSymbol = data.symbol;
+      if (data.price && data.price.current) {
+        state.latestPrice = data.price.current;
+        updateWalletUI();
+      } else if (data.mid_price) {
+        state.latestPrice = data.mid_price;
+        updateWalletUI();
+      }
+    }
+  } catch (e) {}
+}
+
+// Initial Wallet UI Setup
+setTimeout(updateWalletUI, 500);
 
 // ── CLOCK ────────────────────────────────────────────────────
 function updateClock() {
@@ -651,8 +827,12 @@ function addSignalToLog(text) {
   let cls = 'neutral', label = '●';
   if (lower.includes('bullish') || lower.includes('long') || lower.includes('buy')) {
     cls = 'bullish'; label = '▲';
+    state.latestSignal = 'BULLISH';
   } else if (lower.includes('bearish') || lower.includes('short') || lower.includes('sell')) {
     cls = 'bearish'; label = '▼';
+    state.latestSignal = 'BEARISH';
+  } else {
+    state.latestSignal = 'NEUTRAL';
   }
 
   const el = document.createElement('div');
@@ -666,6 +846,17 @@ function addSignalToLog(text) {
   const sigEl = document.getElementById('metric-signal');
   sigEl.textContent = cls.toUpperCase();
   sigEl.className = `orb text-sm mt-1 signal-${cls}`;
+
+  // Update Paper Actions if signal is Bullish or Bearish and we don't have a position
+  const actionsEl = document.getElementById('paper-actions');
+  const labelEl = document.getElementById('active-signal-label');
+  if ((state.latestSignal === 'BULLISH' || state.latestSignal === 'BEARISH') && !wallet.position) {
+    labelEl.textContent = state.latestSignal;
+    labelEl.className = state.latestSignal === 'BULLISH' ? 'acid font-bold' : 'loss font-bold';
+    actionsEl.classList.remove('hidden');
+  } else {
+    actionsEl.classList.add('hidden');
+  }
 }
 
 // ── FORMAT OUTPUT CHUNK ──────────────────────────────────────
@@ -681,6 +872,7 @@ function formatChunk(text) {
   // Detect JSON blocks
   if (text.startsWith('```json\n') || text.startsWith('```json')) {
     const json = text.replace(/```json\n?/g, '').replace(/```/g, '').trim();
+    parsePriceFromJSON(json);
     return `<div class="json-block">${escapeHtml(json)}</div>`;
   }
   if (text.startsWith('```\n') || text === '```') {
@@ -828,6 +1020,8 @@ async function simulateDemoMode(outputEl, cursorEl, symbol, query) {
 }
 
 // ── AUDIT ENGINE ─────────────────────────────────────────────
+let auditChartInstance = null;
+
 function showAuditModal() {
   document.getElementById('audit-modal').classList.remove('hidden');
   document.getElementById('audit-init').classList.remove('hidden');
@@ -837,6 +1031,60 @@ function showAuditModal() {
 
 function closeAuditModal() {
   document.getElementById('audit-modal').classList.add('hidden');
+}
+
+function renderAuditChart(pnlSeries) {
+  const ctx = document.getElementById('audit-chart').getContext('2d');
+  
+  if (auditChartInstance) {
+    auditChartInstance.destroy();
+  }
+  
+  const labels = pnlSeries.map((item, index) => item.timestamp ? item.timestamp.split(' ')[0] : `Trade ${index + 1}`);
+  const pnlData = pnlSeries.map(item => item.cumulative_pnl);
+  
+  auditChartInstance = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Cumulative PnL ($)',
+        data: pnlData,
+        borderColor: '#00ff88',
+        backgroundColor: 'rgba(0, 255, 136, 0.05)',
+        borderWidth: 1.5,
+        pointRadius: 2,
+        pointBackgroundColor: '#00ff88',
+        tension: 0.1,
+        fill: true
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#0d1520',
+          titleColor: '#c8e0f0',
+          bodyColor: '#00ff88',
+          borderColor: '#1e3040',
+          borderWidth: 1,
+          displayColors: false
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: 'rgba(30, 48, 64, 0.15)' },
+          ticks: { color: '#8faabf', font: { family: 'Share Tech Mono', size: 9 } }
+        },
+        y: {
+          grid: { color: 'rgba(30, 48, 64, 0.15)' },
+          ticks: { color: '#8faabf', font: { family: 'Share Tech Mono', size: 9 } }
+        }
+      }
+    }
+  });
 }
 
 async function triggerAudit(csvPath) {
@@ -865,6 +1113,11 @@ async function triggerAudit(csvPath) {
     document.getElementById('audit-samples').textContent = data.metadata.samples_processed;
     document.getElementById('audit-pnl').textContent = '$' + data.stats.avg_profit_per_signal;
     document.getElementById('audit-expectancy').textContent = data.stats.expectancy;
+    
+    // Set New stats
+    document.getElementById('audit-sharpe').textContent = data.stats.sharpe_ratio;
+    document.getElementById('audit-sortino').textContent = data.stats.sortino_ratio;
+    document.getElementById('audit-mdd').textContent = data.stats.max_drawdown_pct + '%';
 
     const trades = data.trades;
     const buys = trades.filter(t => t.signal === 'BULLISH').length;
@@ -888,6 +1141,12 @@ async function triggerAudit(csvPath) {
 
     loading.classList.add('hidden');
     results.classList.remove('hidden');
+
+    // Render Equity Chart
+    if (data.cumulative_pnl_series && data.cumulative_pnl_series.length > 0) {
+      // Small timeout to allow canvas to render in layout first
+      setTimeout(() => renderAuditChart(data.cumulative_pnl_series), 100);
+    }
 
   } catch (err) {
     alert('Audit Error: ' + err.message);
