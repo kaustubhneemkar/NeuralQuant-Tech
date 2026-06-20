@@ -1,11 +1,20 @@
 import sys
 from pathlib import Path
-from fastapi.testclient import TestClient
+from unittest.mock import MagicMock
+
+# Mock the google.genai module BEFORE any project imports
+# This prevents ImportError in CI where the full SDK may not install cleanly
+genai_mock = MagicMock()
+google_mock = MagicMock()
+google_mock.genai = genai_mock
+sys.modules.setdefault("google.genai", genai_mock)
+sys.modules.setdefault("google", google_mock)
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from api.main import app
+from fastapi.testclient import TestClient
 
 client = TestClient(app)
 
