@@ -1,14 +1,15 @@
 import sys
+import os
 from pathlib import Path
 from unittest.mock import MagicMock
 
-# Mock the google.genai module BEFORE any project imports
-# This prevents ImportError in CI where the full SDK may not install cleanly
-genai_mock = MagicMock()
-google_mock = MagicMock()
-google_mock.genai = genai_mock
-sys.modules.setdefault("google.genai", genai_mock)
-sys.modules.setdefault("google", google_mock)
+# Mock ONLY google.genai (not the entire google namespace)
+# This prevents ImportError without breaking google.protobuf for yfinance
+if "google.genai" not in sys.modules:
+    sys.modules["google.genai"] = MagicMock()
+
+# Ensure GOOGLE_API_KEY is set for agent initialization
+os.environ.setdefault("GOOGLE_API_KEY", "dummy-key-for-testing")
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -35,5 +36,4 @@ def test_tools_endpoint():
 def test_root_serves_ui():
     response = client.get("/")
     assert response.status_code == 200
-    # Should serve the index.html page
     assert "ALPHA-LENS" in response.text
