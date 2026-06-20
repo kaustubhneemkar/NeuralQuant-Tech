@@ -52,7 +52,6 @@ def _load_csv_data() -> pd.DataFrame:
 
 def _fetch_market_data(symbol: str, n: int = 200) -> pd.DataFrame:
     """Fetches data for a symbol. Respects backtest mode if active."""
-    global _backtest_mode, _backtest_data, _backtest_index
     
     if _backtest_mode and not _backtest_data.empty:
         # Return a window ENDING at _backtest_index
