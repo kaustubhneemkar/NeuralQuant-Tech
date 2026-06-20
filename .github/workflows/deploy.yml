@@ -22,7 +22,7 @@ jobs:
     - name: Install Linting & Testing Tools
       run: |
         python -m pip install --upgrade pip
-        pip install flake8 pytest pytest-asyncio httpx fastapi pydantic uvicorn pandas yfinance mcp google-genai python-dotenv
+        pip install flake8 pytest pytest-asyncio httpx fastapi pydantic uvicorn pandas yfinance mcp python-dotenv protobuf
 
     - name: Run Linting Checks
       run: |
